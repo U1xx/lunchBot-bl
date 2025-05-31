@@ -6,13 +6,14 @@ import { useState } from "react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
-import { CheckCircle, XCircle } from "lucide-react"
+import { CheckCircle, XCircle, Bug } from "lucide-react"
 
 export default function Home() {
   const [loading, setLoading] = useState(false)
   const [result, setResult] = useState<{ success: boolean; message?: string; error?: string } | null>(null)
   const [testResult, setTestResult] = useState<any>(null)
   const [slackTestResult, setSlackTestResult] = useState<any>(null)
+  const [debugInfo, setDebugInfo] = useState<any>(null)
 
   const triggerLunchPicker = async () => {
     setLoading(true)
@@ -63,6 +64,24 @@ export default function Home() {
       setSlackTestResult({
         success: false,
         error: error instanceof Error ? error.message : "Slackテストに失敗しました",
+      })
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const debugSlack = async () => {
+    setLoading(true)
+    setDebugInfo(null)
+
+    try {
+      const response = await fetch("/api/debug-slack")
+      const data = await response.json()
+      setDebugInfo(data)
+    } catch (error) {
+      setDebugInfo({
+        success: false,
+        error: error instanceof Error ? error.message : "デバッグに失敗しました",
       })
     } finally {
       setLoading(false)
@@ -141,6 +160,19 @@ export default function Home() {
             </Alert>
           )}
 
+          {/* デバッグ情報 */}
+          {debugInfo && (
+            <Alert className="bg-yellow-50 border-yellow-200 mb-4">
+              <Bug className="h-4 w-4 text-yellow-600" />
+              <AlertTitle>デバッグ情報</AlertTitle>
+              <AlertDescription>
+                <div className="text-xs font-mono overflow-auto max-h-60">
+                  <pre>{JSON.stringify(debugInfo, null, 2)}</pre>
+                </div>
+              </AlertDescription>
+            </Alert>
+          )}
+
           {/* 実行結果 */}
           {result && (
             <Alert className={result.success ? "bg-green-50 border-green-200 mb-4" : "bg-red-50 border-red-200 mb-4"}>
@@ -160,6 +192,9 @@ export default function Home() {
           </Button>
           <Button onClick={testSlack} disabled={loading} variant="outline" className="w-full">
             {loading ? "テスト中..." : "💬 Slack接続テスト"}
+          </Button>
+          <Button onClick={debugSlack} disabled={loading} variant="outline" className="w-full">
+            {loading ? "デバッグ中..." : "🐞 Slackデバッグ情報"}
           </Button>
           <Button onClick={triggerLunchPicker} disabled={loading} className="w-full">
             {loading ? "ランチを選んでいます..." : "🍽️ ランチを選ぶ"}
