@@ -1,39 +1,77 @@
 "use client"
 
-import { CardFooter } from "@/components/ui/card"
-
 import { useState } from "react"
+import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
-import { CheckCircle, XCircle, Bug, Building, Calendar, BarChart3 } from "lucide-react"
+import { Alert, AlertTitle, AlertDescription } from "@/components/ui/alert"
+import { CheckCircle, XCircle, ShoppingCart, BarChart3 } from "lucide-react"
 
+/**
+ * 管理ダッシュボード
+ *  - ランチ候補選択
+ *  - 注文取りまとめ
+ *  - テスト / デバッグ各種
+ */
 export default function Home() {
+  /* ------------- 汎用状態 ------------- */
   const [loading, setLoading] = useState(false)
   const [result, setResult] = useState<{ success: boolean; message?: string; error?: string } | null>(null)
-  const [testResult, setTestResult] = useState<any>(null)
-  const [slackTestResult, setSlackTestResult] = useState<any>(null)
-  const [debugInfo, setDebugInfo] = useState<any>(null)
-  const [workspaceInfo, setWorkspaceInfo] = useState<any>(null)
-  const [webhookTest, setWebhookTest] = useState<any>(null)
-  const [weekdayTest, setWeekdayTest] = useState<any>(null)
-  const [historyData, setHistoryData] = useState<any>(null)
-  const [selectionAnalysis, setSelectionAnalysis] = useState<any>(null)
 
+  /* ------------- ランチ履歴 / 選択分析 ------------- */
+  const [historyData, setHistoryData] = useState<any>(null)
+  const [analysisData, setAnalysisData] = useState<any>(null)
+
+  /* ------------- 注文関連 ------------- */
+  const [orderData, setOrderData] = useState<any>(null)
+
+  /* ------------- テスト / デバッグ ------------- */
+  const [sheetTest, setSheetTest] = useState<any>(null)
+  const [weekdayTest, setWeekdayTest] = useState<any>(null)
+  const [workspaceInfo, setWorkspaceInfo] = useState<any>(null)
+  const [slackTest, setSlackTest] = useState<any>(null)
+  const [debugInfo, setDebugInfo] = useState<any>(null)
+  const [webhookTest, setWebhookTest] = useState<any>(null)
+
+  /* ---------- 共通 fetch ヘルパー ---------- */
+  const fetchJSON = async (url: string, options?: RequestInit) => {
+    const res = await fetch(url, options)
+    return res.json()
+  }
+
+  /* ---------- ボタンクリックハンドラ ---------- */
   const triggerLunchPicker = async () => {
     setLoading(true)
-    setResult(null)
-
     try {
-      const response = await fetch("/api/lunch-picker")
-      const data = await response.json()
-
+      const data = await fetchJSON("/api/lunch-picker")
       setResult(data)
-    } catch (error) {
-      setResult({
-        success: false,
-        error: error instanceof Error ? error.message : "不明なエラーが発生しました",
-      })
+    } catch (err: any) {
+      setResult({ success: false, error: err.message })
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const fetchOrders = async () => {
+    setLoading(true)
+    try {
+      const data = await fetchJSON("/api/orders")
+      setOrderData(data)
+    } catch (err: any) {
+      setOrderData({ success: false, error: err.message })
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const collectOrders = async () => {
+    setLoading(true)
+    try {
+      const data = await fetchJSON("/api/collect-orders", { method: "POST" })
+      setResult(data)
+      /* 更新 */
+      setTimeout(fetchOrders, 1000)
+    } catch (err: any) {
+      setResult({ success: false, error: err.message })
     } finally {
       setLoading(false)
     }
@@ -41,14 +79,14 @@ export default function Home() {
 
   const testSpreadsheet = async () => {
     setLoading(true)
-    setTestResult(null)
+    setSheetTest(null)
 
     try {
       const response = await fetch("/api/test-sheets")
       const data = await response.json()
-      setTestResult(data)
+      setSheetTest(data)
     } catch (error) {
-      setTestResult({
+      setSheetTest({
         success: false,
         error: error instanceof Error ? error.message : "テストに失敗しました",
       })
@@ -59,14 +97,14 @@ export default function Home() {
 
   const testSlack = async () => {
     setLoading(true)
-    setSlackTestResult(null)
+    setSlackTest(null)
 
     try {
       const response = await fetch("/api/test-slack")
       const data = await response.json()
-      setSlackTestResult(data)
+      setSlackTest(data)
     } catch (error) {
-      setSlackTestResult({
+      setSlackTest({
         success: false,
         error: error instanceof Error ? error.message : "Slackテストに失敗しました",
       })
@@ -254,14 +292,14 @@ export default function Home() {
 
   const getSelectionAnalysis = async () => {
     setLoading(true)
-    setSelectionAnalysis(null)
+    setAnalysisData(null)
 
     try {
       const response = await fetch("/api/selection-analysis")
       const data = await response.json()
-      setSelectionAnalysis(data)
+      setAnalysisData(data)
     } catch (error) {
-      setSelectionAnalysis({
+      setAnalysisData({
         success: false,
         error: error instanceof Error ? error.message : "選択分析の取得に失敗しました",
       })
@@ -300,17 +338,112 @@ export default function Home() {
     }
   }
 
-  return (
-    <main className="flex min-h-screen flex-col items-center justify-center p-4 bg-gray-50">
-      <Card className="w-full max-w-md">
-        <CardHeader>
-          <CardTitle>ランチ候補選択ツール</CardTitle>
-          <CardDescription>平日AM9:00に自動でGoogle Sheetsからお店を選んでSlackに通知</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <p className="mb-4 text-sm text-gray-600">まずは各種テストを実行して設定を確認してください。</p>
+  const addTestOrders = async () => {
+    if (!confirm("テスト用の注文データを追加しますか？")) {
+      return
+    }
 
-          {/* 履歴データ表示 */}
+    setLoading(true)
+
+    try {
+      const response = await fetch("/api/orders", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "addTestData" }),
+      })
+      const data = await response.json()
+
+      if (data.success) {
+        setResult({ success: true, message: data.message })
+        // 注文データを再取得
+        setTimeout(() => fetchOrders(), 1000)
+      } else {
+        setResult({ success: false, error: data.error })
+      }
+    } catch (error) {
+      setResult({
+        success: false,
+        error: error instanceof Error ? error.message : "テスト注文データの追加に失敗しました",
+      })
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const clearOrders = async () => {
+    if (!confirm("全ての注文セッションをクリアしますか？この操作は取り消せません。")) {
+      return
+    }
+
+    setLoading(true)
+
+    try {
+      const response = await fetch("/api/orders", { method: "DELETE" })
+      const data = await response.json()
+
+      if (data.success) {
+        setOrderData(null)
+        setResult({ success: true, message: data.message })
+      } else {
+        setResult({ success: false, error: data.error })
+      }
+    } catch (error) {
+      setResult({
+        success: false,
+        error: error instanceof Error ? error.message : "注文データのクリアに失敗しました",
+      })
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  /* ---------- レンダー ---------- */
+  return (
+    <main className="flex min-h-screen items-center justify-center bg-gray-50 p-4">
+      <Card className="w-full max-w-xl">
+        <CardHeader>
+          <CardTitle>ランチ候補 &amp; 注文管理ツール</CardTitle>
+          <CardDescription>Slack でランチを選び、注文を取りまとめます</CardDescription>
+        </CardHeader>
+
+        <CardContent className="space-y-4">
+          {/* --- 注文情報 --- */}
+          {orderData && (
+            <Alert className={orderData.success ? "border-green-200 bg-green-50" : "border-red-200 bg-red-50"}>
+              {orderData.success ? (
+                <ShoppingCart className="h-4 w-4 text-green-600" />
+              ) : (
+                <XCircle className="h-4 w-4 text-red-600" />
+              )}
+              <AlertTitle>注文状況</AlertTitle>
+              <AlertDescription>
+                {orderData.success ? (
+                  <div className="text-sm">
+                    <p>
+                      <strong>受付中: </strong>
+                      {orderData.isOrderingTime ? "はい" : "いいえ"}
+                    </p>
+                    {orderData.activeSession ? (
+                      <>
+                        <p>
+                          <strong>店舗:</strong> {orderData.activeSession.restaurant?.name}
+                        </p>
+                        <p>
+                          <strong>注文数:</strong> {orderData.activeSession.orders.length} 件
+                        </p>
+                      </>
+                    ) : (
+                      <p>アクティブな注文セッションはありません。</p>
+                    )}
+                  </div>
+                ) : (
+                  orderData.error
+                )}
+              </AlertDescription>
+            </Alert>
+          )}
+
+          {/* --- 履歴 / 分析 --- */}
           {historyData && (
             <Alert
               className={historyData.success ? "bg-indigo-50 border-indigo-200 mb-4" : "bg-red-50 border-red-200 mb-4"}
@@ -372,270 +505,67 @@ export default function Home() {
             </Alert>
           )}
 
-          {/* 選択分析結果 */}
-          {selectionAnalysis && (
+          {analysisData && (
             <Alert
-              className={
-                selectionAnalysis.success ? "bg-orange-50 border-orange-200 mb-4" : "bg-red-50 border-red-200 mb-4"
-              }
+              className={analysisData.success ? "bg-orange-50 border-orange-200 mb-4" : "bg-red-50 border-red-200 mb-4"}
             >
-              {selectionAnalysis.success ? (
+              {analysisData.success ? (
                 <BarChart3 className="h-4 w-4 text-orange-600" />
               ) : (
                 <XCircle className="h-4 w-4 text-red-600" />
               )}
               <AlertTitle>選択分析・除外ルール</AlertTitle>
               <AlertDescription>
-                {selectionAnalysis.success ? (
+                {analysisData.success ? (
                   <div className="text-sm">
                     <p>
-                      <strong>現在の週:</strong> {selectionAnalysis.analysis?.currentWeek}週目
+                      <strong>現在の週:</strong> {analysisData.analysis?.currentWeek}週目
                     </p>
                     <p>
-                      <strong>営業日番号:</strong> {selectionAnalysis.analysis?.currentBusinessDay}
+                      <strong>営業日番号:</strong> {analysisData.analysis?.currentBusinessDay}
                     </p>
 
-                    {selectionAnalysis.analysis?.sameWeekSelections?.length > 0 && (
+                    {analysisData.analysis?.sameWeekSelections?.length > 0 && (
                       <div className="mt-2">
                         <p>
                           <strong>今週選択済み:</strong>
                         </p>
                         <div className="text-xs text-red-600">
-                          {selectionAnalysis.analysis.sameWeekSelections.join(", ")}
+                          {analysisData.analysis.sameWeekSelections.join(", ")}
                         </div>
                       </div>
                     )}
 
-                    {selectionAnalysis.analysis?.consecutiveSelections?.length > 0 && (
+                    {analysisData.analysis?.consecutiveSelections?.length > 0 && (
                       <div className="mt-2">
                         <p>
                           <strong>連続営業日で除外:</strong>
                         </p>
                         <div className="text-xs text-red-600">
-                          {selectionAnalysis.analysis.consecutiveSelections.join(", ")}
+                          {analysisData.analysis.consecutiveSelections.join(", ")}
                         </div>
                       </div>
                     )}
 
-                    {selectionAnalysis.analysis?.recentSelections?.length > 0 && (
+                    {analysisData.analysis?.recentSelections?.length > 0 && (
                       <div className="mt-2">
                         <p>
                           <strong>最近7日間の選択:</strong>
                         </p>
-                        <div className="text-xs text-gray-600">
-                          {selectionAnalysis.analysis.recentSelections.join(", ")}
-                        </div>
+                        <div className="text-xs text-gray-600">{analysisData.analysis.recentSelections.join(", ")}</div>
                       </div>
                     )}
                   </div>
                 ) : (
-                  selectionAnalysis.error
+                  analysisData.error
                 )}
               </AlertDescription>
             </Alert>
           )}
 
-          {/* 平日テスト結果 */}
-          {weekdayTest && (
-            <Alert
-              className={weekdayTest.success ? "bg-blue-50 border-blue-200 mb-4" : "bg-red-50 border-red-200 mb-4"}
-            >
-              <Calendar className="h-4 w-4 text-blue-600" />
-              <AlertTitle>平日・祝日チェック</AlertTitle>
-              <AlertDescription>
-                {weekdayTest.success ? (
-                  <div className="text-sm">
-                    <p>
-                      <strong>現在:</strong> {weekdayTest.currentDate}
-                    </p>
-                    <p>
-                      <strong>状態:</strong> {weekdayTest.message}
-                    </p>
-                    {weekdayTest.nextWeekday && (
-                      <p>
-                        <strong>次の平日:</strong> {weekdayTest.nextWeekday}
-                      </p>
-                    )}
-                    <div className="mt-2">
-                      <p>
-                        <strong>今週の予定:</strong>
-                      </p>
-                      <div className="text-xs">
-                        {weekdayTest.weekDays?.map((day: any) => (
-                          <div key={day.date} className={day.isWeekday ? "text-green-600" : "text-gray-500"}>
-                            {day.date} ({day.dayName}) -{" "}
-                            {day.isWeekday ? "実行" : `休み${day.holidayName ? `(${day.holidayName})` : ""}`}
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  </div>
-                ) : (
-                  weekdayTest.error
-                )}
-              </AlertDescription>
-            </Alert>
-          )}
-
-          {/* Webhookテスト結果 */}
-          {webhookTest && (
-            <Alert
-              className={webhookTest.success ? "bg-green-50 border-green-200 mb-4" : "bg-red-50 border-red-200 mb-4"}
-            >
-              {webhookTest.success ? (
-                <CheckCircle className="h-4 w-4 text-green-600" />
-              ) : (
-                <XCircle className="h-4 w-4 text-red-600" />
-              )}
-              <AlertTitle>Webhookテスト</AlertTitle>
-              <AlertDescription>
-                {webhookTest.success ? (
-                  <div>
-                    <p>✅ エンドポイント動作確認</p>
-                    <p className="text-xs mt-1">URL: {webhookTest.webhookUrl}</p>
-                    <p className="text-xs">このURLをSlack APIのRequest URLに設定してください</p>
-                  </div>
-                ) : (
-                  <div>
-                    <p className="font-semibold text-red-600">{webhookTest.message}</p>
-                    <p className="text-xs mt-1">エラー: {webhookTest.error}</p>
-                  </div>
-                )}
-              </AlertDescription>
-            </Alert>
-          )}
-
-          {/* ワークスペース情報 */}
-          {workspaceInfo && (
-            <Alert
-              className={
-                workspaceInfo.success ? "bg-purple-50 border-purple-200 mb-4" : "bg-red-50 border-red-200 mb-4"
-              }
-            >
-              {workspaceInfo.success ? (
-                <Building className="h-4 w-4 text-purple-600" />
-              ) : (
-                <XCircle className="h-4 w-4 text-red-600" />
-              )}
-              <AlertTitle>ワークスペース情報</AlertTitle>
-              <AlertDescription>
-                {workspaceInfo.success ? (
-                  <div className="text-sm">
-                    <p>
-                      <strong>ワークスペース:</strong> {workspaceInfo.workspace?.name}
-                    </p>
-                    <p>
-                      <strong>Bot名:</strong> {workspaceInfo.bot?.name}
-                    </p>
-                    <p>
-                      <strong>参加チャンネル数:</strong> {workspaceInfo.channels?.length}
-                    </p>
-                    {workspaceInfo.channels?.length > 0 && (
-                      <div className="mt-2">
-                        <p>
-                          <strong>参加中のチャンネル:</strong>
-                        </p>
-                        <ul className="list-disc list-inside ml-2">
-                          {workspaceInfo.channels.map((channel: any) => (
-                            <li
-                              key={channel.id}
-                              className={
-                                channel.id === workspaceInfo.currentChannelId ? "font-bold text-green-600" : ""
-                              }
-                            >
-                              #{channel.name} ({channel.id})
-                              {channel.id === workspaceInfo.currentChannelId && " ← 現在の設定"}
-                            </li>
-                          ))}
-                        </ul>
-                      </div>
-                    )}
-                  </div>
-                ) : (
-                  workspaceInfo.error
-                )}
-              </AlertDescription>
-            </Alert>
-          )}
-
-          {/* スプレッドシートテスト結果 */}
-          {testResult && (
-            <Alert className={testResult.success ? "bg-blue-50 border-blue-200 mb-4" : "bg-red-50 border-red-200 mb-4"}>
-              {testResult.success ? (
-                <CheckCircle className="h-4 w-4 text-blue-600" />
-              ) : (
-                <XCircle className="h-4 w-4 text-red-600" />
-              )}
-              <AlertTitle>スプレッドシートテスト</AlertTitle>
-              <AlertDescription>
-                {testResult.success ? (
-                  <div>
-                    <p>✅ 接続成功</p>
-                    <p>📊 レストラン数: {testResult.restaurantCount}</p>
-                    <p>📋 シート名: {testResult.structure?.sheets?.[0]?.name}</p>
-                  </div>
-                ) : (
-                  testResult.error
-                )}
-              </AlertDescription>
-            </Alert>
-          )}
-
-          {/* Slackテスト結果 */}
-          {slackTestResult && (
-            <Alert
-              className={
-                slackTestResult.success ? "bg-green-50 border-green-200 mb-4" : "bg-red-50 border-red-200 mb-4"
-              }
-            >
-              {slackTestResult.success ? (
-                <CheckCircle className="h-4 w-4 text-green-600" />
-              ) : (
-                <XCircle className="h-4 w-4 text-red-600" />
-              )}
-              <AlertTitle>Slackテスト</AlertTitle>
-              <AlertDescription>
-                {slackTestResult.success ? (
-                  <div>
-                    <p>✅ Slack接続成功</p>
-                    <p>🤖 Bot: {slackTestResult.botInfo?.user}</p>
-                    <p>📢 チャンネル: #{slackTestResult.channelInfo?.name}</p>
-                  </div>
-                ) : (
-                  <div>
-                    <p className="font-semibold text-red-600">{slackTestResult.error}</p>
-                    {slackTestResult.suggestions && (
-                      <div className="mt-2">
-                        <p className="font-medium">解決方法:</p>
-                        <ul className="list-disc list-inside text-sm">
-                          {slackTestResult.suggestions.map((suggestion: string, index: number) => (
-                            <li key={index}>{suggestion}</li>
-                          ))}
-                        </ul>
-                      </div>
-                    )}
-                  </div>
-                )}
-              </AlertDescription>
-            </Alert>
-          )}
-
-          {/* デバッグ情報 */}
-          {debugInfo && (
-            <Alert className="bg-yellow-50 border-yellow-200 mb-4">
-              <Bug className="h-4 w-4 text-yellow-600" />
-              <AlertTitle>デバッグ情報</AlertTitle>
-              <AlertDescription>
-                <div className="text-xs font-mono overflow-auto max-h-60">
-                  <pre>{JSON.stringify(debugInfo, null, 2)}</pre>
-                </div>
-              </AlertDescription>
-            </Alert>
-          )}
-
-          {/* 実行結果 */}
+          {/* --- 実行結果 / エラー --- */}
           {result && (
-            <Alert className={result.success ? "bg-green-50 border-green-200 mb-4" : "bg-red-50 border-red-200 mb-4"}>
+            <Alert className={result.success ? "border-green-200 bg-green-50" : "border-red-200 bg-red-50"}>
               {result.success ? (
                 <CheckCircle className="h-4 w-4 text-green-600" />
               ) : (
@@ -646,54 +576,54 @@ export default function Home() {
             </Alert>
           )}
         </CardContent>
+
         <CardFooter className="flex flex-col gap-2">
-          <Button onClick={getHistory} disabled={loading} variant="outline" className="w-full bg-transparent">
-            {loading ? "取得中..." : "📊 選択履歴・統計を見る"}
+          {/* --- 注文関連 --- */}
+          <Button variant="outline" className="w-full bg-transparent" disabled={loading} onClick={fetchOrders}>
+            📦 注文状況を取得
           </Button>
-          <Button onClick={getSelectionAnalysis} disabled={loading} variant="outline" className="w-full bg-transparent">
-            {loading ? "分析中..." : "🔍 選択分析・除外ルール確認"}
+          <Button variant="outline" className="w-full bg-transparent" disabled={loading} onClick={collectOrders}>
+            📋 注文を取りまとめる
           </Button>
-          <Button
-            onClick={addTestHistory}
-            disabled={loading}
-            variant="outline"
-            className="w-full bg-transparent text-blue-600 hover:text-blue-700"
-          >
-            {loading ? "追加中..." : "🧪 テスト履歴を追加"}
+          <Button variant="outline" className="w-full bg-transparent" disabled={loading} onClick={addTestOrders}>
+            📋 テスト用注文データを追加
           </Button>
-          {historyData?.success && historyData.totalRecords > 0 && (
-            <Button
-              onClick={clearHistory}
-              disabled={loading}
-              variant="outline"
-              className="w-full bg-transparent text-red-600 hover:text-red-700"
-            >
-              {loading ? "クリア中..." : "🗑️ 履歴をクリア"}
-            </Button>
-          )}
-          <Button onClick={testWeekday} disabled={loading} variant="outline" className="w-full bg-transparent">
-            {loading ? "チェック中..." : "📅 平日・祝日チェック"}
+          <Button variant="outline" className="w-full bg-transparent" disabled={loading} onClick={clearOrders}>
+            📋 注文データをクリア
           </Button>
-          <Button onClick={testCronJob} disabled={loading} variant="outline" className="w-full bg-transparent">
-            {loading ? "テスト中..." : "⏰ 定期実行テスト"}
+
+          {/* --- ランチ選択 --- */}
+          <Button className="w-full" disabled={loading} onClick={triggerLunchPicker}>
+            🍽️ ランチを選ぶ（手動）
           </Button>
-          <Button onClick={testWebhook} disabled={loading} variant="outline" className="w-full bg-transparent">
-            {loading ? "テスト中..." : "🔗 Webhookエンドポイントテスト"}
+          <Button variant="outline" className="w-full bg-transparent" disabled={loading} onClick={addTestHistory}>
+            📋 テスト用履歴を追加
           </Button>
-          <Button onClick={listWorkspaces} disabled={loading} variant="outline" className="w-full bg-transparent">
-            {loading ? "確認中..." : "🏢 ワークスペース・チャンネル確認"}
+          <Button variant="outline" className="w-full bg-transparent" disabled={loading} onClick={clearHistory}>
+            📋 履歴をクリア
           </Button>
-          <Button onClick={testSpreadsheet} disabled={loading} variant="outline" className="w-full bg-transparent">
-            {loading ? "テスト中..." : "📊 スプレッドシート接続テスト"}
+
+          {/* --- テスト / デバッグ --- */}
+          <Button variant="outline" className="w-full bg-transparent" disabled={loading} onClick={testSpreadsheet}>
+            📋 スプレッドシート接続をテスト
           </Button>
-          <Button onClick={testSlack} disabled={loading} variant="outline" className="w-full bg-transparent">
-            {loading ? "テスト中..." : "💬 Slack接続テスト"}
+          <Button variant="outline" className="w-full bg-transparent" disabled={loading} onClick={testSlack}>
+            📋 Slack接続をテスト
           </Button>
-          <Button onClick={debugSlack} disabled={loading} variant="outline" className="w-full bg-transparent">
-            {loading ? "デバッグ中..." : "🐞 Slackデバッグ情報"}
+          <Button variant="outline" className="w-full bg-transparent" disabled={loading} onClick={debugSlack}>
+            🐛 Slackデバッグ情報を取得
           </Button>
-          <Button onClick={triggerLunchPicker} disabled={loading} className="w-full">
-            {loading ? "ランチを選んでいます..." : "🍽️ ランチを選ぶ（手動実行）"}
+          <Button variant="outline" className="w-full bg-transparent" disabled={loading} onClick={listWorkspaces}>
+            🏢 ワークスペース情報を取得
+          </Button>
+          <Button variant="outline" className="w-full bg-transparent" disabled={loading} onClick={testWebhook}>
+            📋 Webhookエンドポイントをテスト
+          </Button>
+          <Button variant="outline" className="w-full bg-transparent" disabled={loading} onClick={testWeekday}>
+            📅 平日・祝日チェックをテスト
+          </Button>
+          <Button variant="outline" className="w-full bg-transparent" disabled={loading} onClick={testCronJob}>
+            🕒 Cron Jobをテスト
           </Button>
         </CardFooter>
       </Card>

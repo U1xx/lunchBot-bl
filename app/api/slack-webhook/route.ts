@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server"
 import { getRestaurantList, pickRandomRestaurant } from "@/lib/google-sheets"
-import { sendLunchRecommendation } from "@/lib/slack"
+import { sendLunchRecommendation, sendOrderSummary } from "@/lib/slack"
+import { getActiveOrderSession, closeOrderSession, addMenuMessage } from "@/lib/orders"
 
 export async function POST(request: Request) {
   try {
@@ -53,6 +54,26 @@ export async function POST(request: Request) {
       return NextResponse.json({ challenge: payload.challenge })
     }
 
+    // メッセージイベント（メニュー投稿の記録）
+    if (payload.type === "event_callback" && payload.event?.type === "message") {
+      const event = payload.event
+      const activeSession = getActiveOrderSession()
+
+      if (activeSession && event.text && !event.bot_id) {
+        // ボットメッセージ以外を記録
+        addMenuMessage(activeSession.id, {
+          userId: event.user,
+          text: event.text,
+          timestamp: event.ts,
+          channel: event.channel,
+        })
+
+        console.log(`Recorded menu message from ${event.user}: ${event.text}`)
+      }
+
+      return NextResponse.json({ success: true })
+    }
+
     // インタラクティブ要素の処理
     if (payload.type === "block_actions") {
       const action = payload.actions?.[0]
@@ -94,6 +115,57 @@ export async function POST(request: Request) {
         return NextResponse.json({
           response_type: "ephemeral",
           text: `${userName}さんがこのお店を気に入りました！👍`,
+        })
+      }
+
+      if (actionId === "collect_orders" || actionId === "collect_orders_now") {
+        try {
+          console.log("Processing collect_orders action...")
+
+          const activeSession = getActiveOrderSession()
+          if (!activeSession) {
+            return NextResponse.json({
+              response_type: "ephemeral",
+              text: "アクティブな注文セッションがありません。",
+            })
+          }
+
+          // セッションを終了
+          const closedSession = closeOrderSession(activeSession.id)
+          if (!closedSession) {
+            return NextResponse.json({
+              response_type: "ephemeral",
+              text: "注文セッションの終了に失敗しました。",
+            })
+          }
+
+          // Slackに取りまとめ結果を送信
+          await sendOrderSummary(closedSession)
+
+          return NextResponse.json({
+            response_type: "in_channel",
+            text: `${userName}さんが注文を取りまとめました！結果を送信しました。`,
+          })
+        } catch (error: any) {
+          console.error("Error collecting orders:", error)
+          return NextResponse.json({
+            response_type: "ephemeral",
+            text: "注文の取りまとめ中にエラーが発生しました。",
+          })
+        }
+      }
+
+      if (actionId === "call_restaurant") {
+        return NextResponse.json({
+          response_type: "ephemeral",
+          text: "お店への注文は手動で行ってください。電話番号やオンライン注文サイトを確認してください。",
+        })
+      }
+
+      if (actionId === "edit_orders") {
+        return NextResponse.json({
+          response_type: "ephemeral",
+          text: "注文の編集は管理画面から行えます。",
         })
       }
 

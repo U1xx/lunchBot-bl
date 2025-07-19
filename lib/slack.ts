@@ -1,4 +1,5 @@
 import { WebClient } from "@slack/web-api"
+import { generateOrderSummary } from "./orders"
 
 // Slack APIクライアントの初期化
 const slack = new WebClient(process.env.SLACK_BOT_TOKEN)
@@ -71,6 +72,15 @@ export async function sendLunchRecommendation(restaurant: any) {
       })
     }
 
+    // 注文案内を追加
+    blocks.push({
+      type: "section",
+      text: {
+        type: "mrkdwn",
+        text: "📝 *テイクアウト注文について*\nメニューを投稿してください（AM11:00まで）。後で注文を取りまとめます。",
+      },
+    })
+
     // アクションボタンを追加
     blocks.push({
       type: "actions",
@@ -94,6 +104,16 @@ export async function sendLunchRecommendation(restaurant: any) {
           action_id: "lunch_reject",
           style: "danger",
         },
+        {
+          type: "button",
+          text: {
+            type: "plain_text",
+            text: "📋 注文を取りまとめる",
+            emoji: true,
+          },
+          action_id: "collect_orders",
+          style: "primary",
+        },
       ],
     })
 
@@ -107,6 +127,133 @@ export async function sendLunchRecommendation(restaurant: any) {
     return result
   } catch (error) {
     console.error("Error sending message to Slack:", error)
+    throw error
+  }
+}
+
+// 注文取りまとめメッセージを送信
+export async function sendOrderSummary(session: any) {
+  try {
+    const summary = generateOrderSummary(session)
+
+    const blocks = [
+      {
+        type: "header",
+        text: {
+          type: "plain_text",
+          text: "📋 注文取りまとめ結果",
+          emoji: true,
+        },
+      },
+      {
+        type: "section",
+        text: {
+          type: "mrkdwn",
+          text: summary,
+        },
+      },
+    ]
+
+    // 注文がある場合は追加のアクションボタン
+    if (session.orders.length > 0) {
+      blocks.push({
+        type: "actions",
+        elements: [
+          {
+            type: "button",
+            text: {
+              type: "plain_text",
+              text: "📞 お店に注文する",
+              emoji: true,
+            },
+            action_id: "call_restaurant",
+            style: "primary",
+          },
+          {
+            type: "button",
+            text: {
+              type: "plain_text",
+              text: "📝 注文を編集",
+              emoji: true,
+            },
+            action_id: "edit_orders",
+          },
+        ],
+      })
+    }
+
+    const result = await slack.chat.postMessage({
+      channel: process.env.SLACK_CHANNEL_ID!,
+      blocks: blocks,
+      text: `注文取りまとめ: ${session.restaurant.name}`,
+    })
+
+    return result
+  } catch (error) {
+    console.error("Error sending order summary:", error)
+    throw error
+  }
+}
+
+// メニュー投稿の案内メッセージを送信
+export async function sendMenuCollectionNotice(restaurant: any) {
+  try {
+    const blocks = [
+      {
+        type: "header",
+        text: {
+          type: "plain_text",
+          text: "📝 メニュー投稿のお願い",
+          emoji: true,
+        },
+      },
+      {
+        type: "section",
+        text: {
+          type: "mrkdwn",
+          text: `*${restaurant.name}* のテイクアウト注文を取りまとめます！\n\n希望するメニューをこのチャンネルに投稿してください。`,
+        },
+      },
+      {
+        type: "section",
+        text: {
+          type: "mrkdwn",
+          text: "*投稿例:*\n• 唐揚げ弁当 x1\n• チキン南蛮弁当 x2 (タルタル多め)\n• 日替わり定食",
+        },
+      },
+      {
+        type: "section",
+        text: {
+          type: "mrkdwn",
+          text: "⏰ *締切: AM11:00*\n📋 後で「注文を取りまとめる」ボタンで集計します。",
+        },
+      },
+      {
+        type: "actions",
+        elements: [
+          {
+            type: "button",
+            text: {
+              type: "plain_text",
+              text: "📋 今すぐ取りまとめる",
+              emoji: true,
+            },
+            action_id: "collect_orders_now",
+            style: "primary",
+          },
+        ],
+      },
+    ]
+
+    const result = await slack.chat.postMessage({
+      channel: process.env.SLACK_CHANNEL_ID!,
+      blocks: blocks,
+      text: `メニュー投稿のお願い: ${restaurant.name}`,
+    })
+
+    return result
+  } catch (error) {
+    console.error("Error sending menu collection notice:", error)
     throw error
   }
 }
