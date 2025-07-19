@@ -155,13 +155,6 @@ export async function POST(request: Request) {
         }
       }
 
-      if (actionId === "call_restaurant") {
-        return NextResponse.json({
-          response_type: "ephemeral",
-          text: "お店への注文は手動で行ってください。電話番号やオンライン注文サイトを確認してください。",
-        })
-      }
-
       if (actionId === "edit_orders") {
         return NextResponse.json({
           response_type: "ephemeral",

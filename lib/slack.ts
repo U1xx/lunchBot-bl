@@ -154,21 +154,11 @@ export async function sendOrderSummary(session: any) {
       },
     ]
 
-    // 注文がある場合は追加のアクションボタン
+    // 注文がある場合は編集ボタンのみ表示
     if (session.orders.length > 0) {
       blocks.push({
         type: "actions",
         elements: [
-          {
-            type: "button",
-            text: {
-              type: "plain_text",
-              text: "📞 お店に注文する",
-              emoji: true,
-            },
-            action_id: "call_restaurant",
-            style: "primary",
-          },
           {
             type: "button",
             text: {
