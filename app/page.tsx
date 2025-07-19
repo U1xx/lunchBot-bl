@@ -6,7 +6,7 @@ import { useState } from "react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
-import { CheckCircle, XCircle, Bug, Building } from "lucide-react"
+import { CheckCircle, XCircle, Bug, Building, Calendar } from "lucide-react"
 
 export default function Home() {
   const [loading, setLoading] = useState(false)
@@ -16,6 +16,7 @@ export default function Home() {
   const [debugInfo, setDebugInfo] = useState<any>(null)
   const [workspaceInfo, setWorkspaceInfo] = useState<any>(null)
   const [webhookTest, setWebhookTest] = useState<any>(null)
+  const [weekdayTest, setWeekdayTest] = useState<any>(null)
 
   const triggerLunchPicker = async () => {
     setLoading(true)
@@ -117,18 +118,46 @@ export default function Home() {
       const getResponse = await fetch("/api/slack-webhook")
       const getData = await getResponse.json()
 
+      // POSTテストも実行
+      const testPayload = {
+        type: "block_actions",
+        user: {
+          id: "U123456789",
+          name: "test_user",
+        },
+        actions: [
+          {
+            action_id: "lunch_reject",
+            type: "button",
+          },
+        ],
+      }
+
+      const postResponse = await fetch("/api/slack-webhook", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(testPayload),
+      })
+
+      const postData = await postResponse.json()
+
       // 現在のURLを取得
       const currentUrl = window.location.origin
       const webhookUrl = `${currentUrl}/api/slack-webhook`
 
       setWebhookTest({
-        success: getResponse.ok,
-        status: getResponse.status,
+        success: getResponse.ok && postResponse.ok,
+        getStatus: getResponse.status,
+        postStatus: postResponse.status,
         webhookUrl,
-        response: getData,
-        message: getResponse.ok
-          ? "Webhookエンドポイントが正常に動作しています"
-          : "Webhookエンドポイントでエラーが発生しました",
+        getResponse: getData,
+        postResponse: postData,
+        message:
+          getResponse.ok && postResponse.ok
+            ? "Webhookエンドポイントが正常に動作しています（GET/POST両方）"
+            : "Webhookエンドポイントでエラーが発生しました",
       })
     } catch (error) {
       setWebhookTest({
@@ -140,15 +169,93 @@ export default function Home() {
     }
   }
 
+  const testWeekday = async () => {
+    setLoading(true)
+    setWeekdayTest(null)
+
+    try {
+      const response = await fetch("/api/test-weekday")
+      const data = await response.json()
+      setWeekdayTest(data)
+    } catch (error) {
+      setWeekdayTest({
+        success: false,
+        error: error instanceof Error ? error.message : "平日テストに失敗しました",
+      })
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const testCronJob = async () => {
+    setLoading(true)
+    setResult(null)
+
+    try {
+      const response = await fetch("/api/cron/lunch")
+      const data = await response.json()
+      setResult(data)
+    } catch (error) {
+      setResult({
+        success: false,
+        error: error instanceof Error ? error.message : "Cron Jobテストに失敗しました",
+      })
+    } finally {
+      setLoading(false)
+    }
+  }
+
   return (
     <main className="flex min-h-screen flex-col items-center justify-center p-4 bg-gray-50">
       <Card className="w-full max-w-md">
         <CardHeader>
           <CardTitle>ランチ候補選択ツール</CardTitle>
-          <CardDescription>Google Sheetsからランダムにお店を選んでSlackに通知します</CardDescription>
+          <CardDescription>平日AM9:00に自動でGoogle Sheetsからお店を選んでSlackに通知</CardDescription>
         </CardHeader>
         <CardContent>
           <p className="mb-4 text-sm text-gray-600">まずは各種テストを実行して設定を確認してください。</p>
+
+          {/* 平日テスト結果 */}
+          {weekdayTest && (
+            <Alert
+              className={weekdayTest.success ? "bg-blue-50 border-blue-200 mb-4" : "bg-red-50 border-red-200 mb-4"}
+            >
+              <Calendar className="h-4 w-4 text-blue-600" />
+              <AlertTitle>平日・祝日チェック</AlertTitle>
+              <AlertDescription>
+                {weekdayTest.success ? (
+                  <div className="text-sm">
+                    <p>
+                      <strong>現在:</strong> {weekdayTest.currentDate}
+                    </p>
+                    <p>
+                      <strong>状態:</strong> {weekdayTest.message}
+                    </p>
+                    {weekdayTest.nextWeekday && (
+                      <p>
+                        <strong>次の平日:</strong> {weekdayTest.nextWeekday}
+                      </p>
+                    )}
+                    <div className="mt-2">
+                      <p>
+                        <strong>今週の予定:</strong>
+                      </p>
+                      <div className="text-xs">
+                        {weekdayTest.weekDays?.map((day: any) => (
+                          <div key={day.date} className={day.isWeekday ? "text-green-600" : "text-gray-500"}>
+                            {day.date} ({day.dayName}) -{" "}
+                            {day.isWeekday ? "実行" : `休み${day.holidayName ? `(${day.holidayName})` : ""}`}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                ) : (
+                  weekdayTest.error
+                )}
+              </AlertDescription>
+            </Alert>
+          )}
 
           {/* Webhookテスト結果 */}
           {webhookTest && (
@@ -320,6 +427,12 @@ export default function Home() {
           )}
         </CardContent>
         <CardFooter className="flex flex-col gap-2">
+          <Button onClick={testWeekday} disabled={loading} variant="outline" className="w-full bg-transparent">
+            {loading ? "チェック中..." : "📅 平日・祝日チェック"}
+          </Button>
+          <Button onClick={testCronJob} disabled={loading} variant="outline" className="w-full bg-transparent">
+            {loading ? "テスト中..." : "⏰ 定期実行テスト"}
+          </Button>
           <Button onClick={testWebhook} disabled={loading} variant="outline" className="w-full bg-transparent">
             {loading ? "テスト中..." : "🔗 Webhookエンドポイントテスト"}
           </Button>
@@ -336,7 +449,7 @@ export default function Home() {
             {loading ? "デバッグ中..." : "🐞 Slackデバッグ情報"}
           </Button>
           <Button onClick={triggerLunchPicker} disabled={loading} className="w-full">
-            {loading ? "ランチを選んでいます..." : "🍽️ ランチを選ぶ"}
+            {loading ? "ランチを選んでいます..." : "🍽️ ランチを選ぶ（手動実行）"}
           </Button>
         </CardFooter>
       </Card>
