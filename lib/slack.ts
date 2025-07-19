@@ -58,6 +58,19 @@ export async function sendLunchRecommendation(restaurant: any) {
       })
     }
 
+    // 選択理由があれば追加
+    if (restaurant._selectionNote) {
+      blocks.push({
+        type: "context",
+        elements: [
+          {
+            type: "mrkdwn",
+            text: restaurant._selectionNote,
+          },
+        ],
+      })
+    }
+
     // アクションボタンを追加
     blocks.push({
       type: "actions",

@@ -1,4 +1,5 @@
 import { google } from "googleapis"
+import { pickRandomRestaurantWithHistory, addToHistory } from "./history"
 
 // Google Sheetsからレストランリストを取得する関数
 export async function getRestaurantList() {
@@ -78,13 +79,33 @@ export async function getRestaurantList() {
   }
 }
 
-// ランダムにレストランを選択する関数
-export function pickRandomRestaurant(restaurants: any[]) {
+// 履歴を考慮したランダム選択（強化版）
+export function pickRandomRestaurant(restaurants: any[], targetDate: Date = new Date()) {
   if (!restaurants || restaurants.length === 0) {
     throw new Error("選択可能なレストランがありません")
   }
+
+  const selected = pickRandomRestaurantWithHistory(restaurants, targetDate)
+
+  // 履歴に追加
+  addToHistory(selected, "auto")
+
+  return selected
+}
+
+// 手動選択用（履歴に記録）
+export function pickRandomRestaurantManual(restaurants: any[]) {
+  if (!restaurants || restaurants.length === 0) {
+    throw new Error("選択可能なレストランがありません")
+  }
+
   const randomIndex = Math.floor(Math.random() * restaurants.length)
-  return restaurants[randomIndex]
+  const selected = restaurants[randomIndex]
+
+  // 履歴に追加
+  addToHistory(selected, "manual")
+
+  return selected
 }
 
 // スプレッドシートの構造をテストする関数
