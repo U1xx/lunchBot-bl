@@ -59,6 +59,18 @@ export async function sendLunchRecommendation(restaurant: any) {
       })
     }
 
+    // 注文サイトのURLがあれば追加（orderUrlまたはorder_urlフィールドを想定）
+    if (restaurant.orderUrl || restaurant.order_url) {
+      const orderUrl = restaurant.orderUrl || restaurant.order_url
+      blocks.push({
+        type: "section",
+        text: {
+          type: "mrkdwn",
+          text: `🛒 <${orderUrl}|ネット注文はこちら>`,
+        },
+      })
+    }
+
     // 選択理由があれば追加
     if (restaurant._selectionNote) {
       blocks.push({
@@ -154,6 +166,18 @@ export async function sendOrderSummary(session: any) {
       },
     ]
 
+    // 注文サイトのリンクがある場合は追加
+    if (session.restaurant.orderUrl || session.restaurant.order_url) {
+      const orderUrl = session.restaurant.orderUrl || session.restaurant.order_url
+      blocks.push({
+        type: "section",
+        text: {
+          type: "mrkdwn",
+          text: `🛒 *ネット注文:* <${orderUrl}|こちらから注文してください>`,
+        },
+      })
+    }
+
     // 注文がある場合は編集ボタンのみ表示
     if (session.orders.length > 0) {
       blocks.push({
@@ -211,29 +235,43 @@ export async function sendMenuCollectionNotice(restaurant: any) {
           text: "*投稿例:*\n• 唐揚げ弁当 x1\n• チキン南蛮弁当 x2 (タルタル多め)\n• 日替わり定食",
         },
       },
-      {
+    ]
+
+    // 注文サイトのリンクがある場合は追加
+    if (restaurant.orderUrl || restaurant.order_url) {
+      const orderUrl = restaurant.orderUrl || restaurant.order_url
+      blocks.push({
         type: "section",
         text: {
           type: "mrkdwn",
-          text: "⏰ *締切: AM11:00*\n📋 後で「注文を取りまとめる」ボタンで集計します。",
+          text: `🛒 *メニュー確認:* <${orderUrl}|ネット注文サイトでメニューを確認>`,
         },
+      })
+    }
+
+    blocks.push({
+      type: "section",
+      text: {
+        type: "mrkdwn",
+        text: "⏰ *締切: AM11:00*\n📋 後で「注文を取りまとめる」ボタンで集計します。",
       },
-      {
-        type: "actions",
-        elements: [
-          {
-            type: "button",
-            text: {
-              type: "plain_text",
-              text: "📋 今すぐ取りまとめる",
-              emoji: true,
-            },
-            action_id: "collect_orders_now",
-            style: "primary",
+    })
+
+    blocks.push({
+      type: "actions",
+      elements: [
+        {
+          type: "button",
+          text: {
+            type: "plain_text",
+            text: "📋 今すぐ取りまとめる",
+            emoji: true,
           },
-        ],
-      },
-    ]
+          action_id: "collect_orders_now",
+          style: "primary",
+        },
+      ],
+    })
 
     const result = await slack.chat.postMessage({
       channel: process.env.SLACK_CHANNEL_ID!,
